@@ -1,0 +1,31 @@
+.dash-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #F0F2F5;
+}
+
+.dash-body {
+  flex: 1;
+  padding: 32px 40px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+
+.dp-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  gap: 12px;
+  text-align: center;
+}
+.dp-error-icon { font-size: 48px; }
+.dp-error h3   { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+.dp-error p    { font-size: 14px; color: var(--muted); max-width: 400px; }
+
+@media (max-width: 900px) { .dash-body { padding: 20px 16px; } }
