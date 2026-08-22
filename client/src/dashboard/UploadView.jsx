@@ -6,19 +6,41 @@ export default function UploadView({ loading, onFileSelect }) {
   const handleDrop = (e) => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) onFileSelect(f); };
   return (
     <div className="uv-wrapper">
-      <div className="uv-header"><h1 className="uv-title">Upload Your Blueprint</h1><p className="uv-sub">AI wall detection + DXF precision parsing — choose either format.</p></div>
+      <div className="uv-header"><h1 className="uv-title">Upload Your Blueprint</h1><p className="uv-sub">AI wall detection + DXF precision parsing + PDF support — choose any format.</p></div>
       <div className={`uv-dropzone${drag ? " drag" : ""}${loading ? " busy" : ""}`} onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={handleDrop} onClick={() => !loading && inputRef.current?.click()}>
         <div className="uv-dz-icon">{loading ? "⏳" : "📐"}</div>
         <h2>{loading ? "Analyzing your blueprint..." : "Drop your blueprint here"}</h2>
         <p>{loading ? "AI is measuring walls and calculating costs" : "or click to browse your files"}</p>
         {loading ? <div className="spinner" /> : <button className="uv-browse-btn" onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}>📎 Choose File</button>}
-        <span className="uv-formats">JPG · PNG · DXF | Max 10 MB</span>
-        <input ref={inputRef} type="file" accept="image/*,.dxf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelect(f); }} />
+        <span className="uv-formats">JPG · PNG · PDF · DXF | Max 10 MB</span>
+        <input ref={inputRef} type="file" accept="image/*,.dxf,.pdf,application/pdf" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelect(f); }} />
       </div>
-      <div className="uv-cards">
-        {[{ icon: "🤖", bg: "#FEF3C7", title: "AI Vision", desc: "YOLO detects walls, doors & windows" }, { icon: "📐", bg: "#DBEAFE", title: "DXF Precision", desc: "Exact structural layer parsing" }, { icon: "🇱🇰", bg: "#DCFCE7", title: "LKR Pricing", desc: "Sri Lankan supplier rates built in" }].map((c) => (
-          <div className="uv-card" key={c.title}><div className="uv-card-icon" style={{ background: c.bg }}>{c.icon}</div><h4>{c.title}</h4><p>{c.desc}</p></div>
-        ))}
+
+      <div className="uv-dwg-banner">
+        <div className="uv-dwg-left">
+          <span className="uv-dwg-icon">📁</span>
+          <div>
+            <div className="uv-dwg-title">Have a DWG file? Convert it to DXF first</div>
+            <div className="uv-dwg-desc">TheConstructor supports DXF format. If your architect gave you a <strong>.dwg</strong> file, use the free online converter below — it takes about 30 seconds.</div>
+          </div>
+        </div>
+        <div className="uv-dwg-steps">
+          <span className="uv-dwg-step"><span>1</span> Open the converter</span>
+          <span className="uv-dwg-arrow">→</span>
+          <span className="uv-dwg-step"><span>2</span> Upload your .dwg file</span>
+          <span className="uv-dwg-arrow">→</span>
+          <span className="uv-dwg-step"><span>3</span> Download the .dxf file</span>
+          <span className="uv-dwg-arrow">→</span>
+          <span className="uv-dwg-step"><span>4</span> Upload it here</span>
+        </div>
+        <a
+          href="https://cloudconvert.com/dwg-to-dxf"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="uv-dwg-btn"
+        >
+          Convert DWG → DXF
+        </a>
       </div>
 
       <div className="uv-tips">

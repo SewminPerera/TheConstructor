@@ -1,18 +1,9 @@
-"""
-services/dxf_services.py
-------------------------
-DXF file parsing and preview rendering.
-Doors and windows are counted directly from CAD layers.
-"""
 import math
 import re
 import ezdxf
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-
-# ── Unit conversion ───────────────────────────────────────────────────────────
 
 INSUNITS_MAP = {
     1: (0.0254,  "inches"),
@@ -23,8 +14,7 @@ INSUNITS_MAP = {
     0: (None,    "unitless"),
 }
 
-# Minimum entity length in metres — applied AFTER unit conversion so the
-# threshold is independent of the DXF file's native units.
+
 MIN_LENGTH_M = 0.05  # 50 mm = 5 cm
 
 
@@ -36,10 +26,7 @@ def _dist(a, b) -> float:
 
 
 def _compute_bbox_raw(msp) -> tuple:
-    """Return (min_x, min_y, max_x, max_y) bounding box in raw DXF units.
-
-    Samples the first 5 000 coordinate points for speed.
-    """
+   
     min_x = min_y = float("inf")
     max_x = max_y = float("-inf")
     count = 0
@@ -71,20 +58,14 @@ def _compute_bbox_raw(msp) -> tuple:
 
 
 def _auto_correct_unit_factor(declared_factor: float, declared_label: str,
-                               msp) -> tuple:
-    """Verify declared unit gives a plausible building (3–500 m wide/tall).
-
-    If the declared factor produces an implausibly tiny or huge building,
-    try the common alternatives in order: inches → feet → cm → mm.
-
-    Returns (factor, label, was_corrected).
-    """
+   msp) -> tuple:
+   
     bbox = _compute_bbox_raw(msp)
     w_raw = bbox[2] - bbox[0]
     h_raw = bbox[3] - bbox[1]
     max_dim_raw = max(w_raw, h_raw)
 
-    MIN_M, MAX_M = 2.0, 500.0
+    MIN_M, MAX_M = 2.0, 80.0
 
     def plausible(f):
         dim_m = max_dim_raw * f
@@ -95,9 +76,9 @@ def _auto_correct_unit_factor(declared_factor: float, declared_label: str,
 
     for factor, label in [
         (0.0254,  "inches (auto-detected)"),
-        (0.3048,  "feet (auto-detected)"),
         (0.001,   "mm (auto-detected)"),
         (0.01,    "cm (auto-detected)"),
+        (0.3048,  "feet (auto-detected)"),
         (1.0,     "m (auto-detected)"),
     ]:
         if abs(factor - declared_factor) < 1e-9:
@@ -105,69 +86,57 @@ def _auto_correct_unit_factor(declared_factor: float, declared_label: str,
         if plausible(factor):
             return factor, label, True
 
-    # Nothing gave a sensible size — keep declared
     return declared_factor, declared_label, False
 
 
-# ── Layer keyword sets ────────────────────────────────────────────────────────
 
-# Layers to always REJECT from wall calculation
+
+
 _REJECT = {
     "DIM","DIMS","TEXT","MTEXT","NOTE","ANNO","ANNOT","HATCH","GRID",
     "CENTER","AXIS","TITLE","BORDER","ELECT","PLUMB","MECH","HVAC",
     "SANIT","PLOT","VIEWPORT","DEFPOINTS",
-    # Fixture / fitting / furniture layers
     "FURN","FURNITURE","LVTRY","LAVATORY","BATH","FIXTURE","FITTING",
     "EQUIP","EQUIPMENT","SANITARY","KITCHEN","APPLIANCE","SYMBOL",
     "MOBIL","MOBILIA","COCINA","BANO","BAÑO","TECHO","CEILING","ROOF",
     "INSUL","INSULATION","PARKING","LANDSCAPE","TREE","PLANT","VEGETATION",
-    # Opening layers — counted separately
     "DOOR","WINDOW","OPENING","PUERTAS","PUERTA","VENTANA","FENETRE",
     "PORTA","FINESTRA","STAIR","ESCAL","ESCALERA","RAMP",
 }
 
-# Layers to KEEP as walls
+
 _KEEP = {
-    "WALL","FOOTPRINT","STEM","BEAM","SLAB","FOUND","FOUNDATION",
+    "WALL","WALLS","FOOTPRINT","STEM","BEAM","SLAB","FOUND","FOUNDATION",
     "FOOTER","FOOTING","CONCRETE","STRUCT","A-WALL",
-    # Spanish / Portuguese
+    
     "MURO","PARED","PAREDE","MURI","CIMENT","VIGA","PILAR","TABIQUE",
-    # Italian
+   
     "MURATURA","STRUTTURA",
-    # French
+    
     "MUR","CLOISON","PAROI",
-    # Generic short layer names commonly used for walls in downloaded DXF files
-    # LT = linetype wall, HZ = horizontal, CC = concrete core
+   
     "LT1","LT2","LT3","HZ","CC1","CC2","XX","W1","W2","WL",
 }
 
-# Door layer keywords  (exact token matching — no substrings)
-# Note: "CASE" / "A-CASE" removed — these match cabinet casework (A-CASE-1 etc.)
-# and produce false-positive door arcs.
-# Multi-word names like "A-DOOR" tokenise to {"A","DOOR"}, so only the root
-# keyword ("DOOR") is needed for matching.
+
 _DOOR_LAYERS = {
     "DOOR","DOORS","PUERTA","PUERTAS","PORTA","PORTE","TUR","KAPI",
     "OPENING","GLAZ","GARAGE",
 }
 
-# Tokens present on "opening / glazing" layers where non-ARC entities
-# (LWPOLYLINEs, LINE groups) represent window frames, not door geometry.
-# Note: "A-OPENING" tokenises to {"A", "OPENING"} so only "OPENING" is needed.
+
 _OPENING_TOKENS = {"OPENING", "GLAZ"}
 
-# Window layer keywords  (exact token matching — compound names like "A-GLAZ"
-# split to {"A","GLAZ"}, so the root token "GLAZ" is enough)
+
 _WINDOW_LAYERS = {
     "WINDOW","WINDOWS","VENTANA","VENTANAS","FENETRE","FENETRES",
     "FINESTRA","JANELA","PENCERE","GLAZ","WIND",
 }
 
 
-# ── Token-based layer matching ───────────────────────────────────────────────
 
-# Split on common DXF layer-name delimiters: hyphen, underscore, dot,
-# whitespace, and the xref ``$`` separator.
+
+
 _TOKEN_RE = re.compile(r"[-_.\s$]+")
 
 
@@ -178,39 +147,27 @@ def _tokenize_layer(layer_name: str) -> set:
 
 
 def _tokens_match(tokens: set, keyword_set: set) -> bool:
-    """True if any token is exactly equal to a keyword in *keyword_set*.
 
-    Uses exact token matching instead of substring matching so that e.g.
-    the keyword ``CASE`` does not accidentally match layer ``STAIRCASE``
-    (``STAIRCASE`` is a single token; it would need to be ``STAIR-CASE``
-    for the ``CASE`` token to appear).
-    """
     return bool(tokens & keyword_set)
 
 
 def _base_layer(layer_name: str) -> str:
-    """Strip xref prefix: xref-name$0$A-WALL -> A-WALL"""
+    
     s = (layer_name or "").upper()
     return s.split("$")[-1] if "$" in s else s
 
 
 def _is_structural_layer(layer_name: str) -> bool:
-    """Decide whether *layer_name* is a structural (wall) layer.
-
-    Token-based matching is used so that compound names like
-    ``WALL-OPENING`` correctly match *both* KEEP and REJECT — in that
-    case KEEP wins, because the layer explicitly carries wall geometry
-    even though it also mentions an opening.
-    """
+    
     tokens = _tokenize_layer(layer_name)
     has_keep   = _tokens_match(tokens, _KEEP)
     has_reject = _tokens_match(tokens, _REJECT)
-    # KEEP wins over REJECT for compound names (e.g. "WALL-OPENING")
+    
     if has_keep:
         return True
     if has_reject:
         return False
-    # Legacy special-case preserved for backward compat
+   
     if "A-WALL" in (layer_name or "").upper():
         return True
     return False
@@ -226,14 +183,10 @@ def _is_window_layer(layer_name: str) -> bool:
     return _tokens_match(tokens, _WINDOW_LAYERS)
 
 
-# ── Entity length ─────────────────────────────────────────────────────────────
+
 
 def _bulge_segment_length(p1, p2, bulge: float) -> float:
-    """Return the arc length of an LWPOLYLINE segment with a bulge value.
-
-    A bulge of 0 is a straight chord.  Otherwise the arc angle is
-    ``4 * atan(|bulge|)`` and the radius is derived from the chord.
-    """
+    
     chord = _dist(p1, p2)
     if chord == 0:
         return 0.0
@@ -248,7 +201,7 @@ def _bulge_segment_length(p1, p2, bulge: float) -> float:
 
 
 def _entity_length(e) -> float:
-    """Return the linear length of a single DXF entity in raw DXF units."""
+    
     t = e.dxftype()
 
     if t == "LINE":
@@ -256,8 +209,8 @@ def _entity_length(e) -> float:
                      (e.dxf.end.x,   e.dxf.end.y))
 
     if t == "LWPOLYLINE":
-        # Use bulge-aware segment lengths instead of straight-chord approx.
-        pts_with_bulge = list(e.get_points("xyb"))  # (x, y, bulge)
+        
+        pts_with_bulge = list(e.get_points("xyb"))  
         n = len(pts_with_bulge)
         if n < 2:
             return 0.0
@@ -284,15 +237,14 @@ def _entity_length(e) -> float:
         a1 = math.radians(e.dxf.start_angle)
         a2 = math.radians(e.dxf.end_angle)
         sweep = a2 - a1
-        # Wrap so sweep is always positive (CCW)
+       
         while sweep <= 0:
             sweep += 2 * math.pi
         return abs(r * sweep)
 
     if t == "SPLINE":
         try:
-            # ezdxf flattening returns a list of Vec3 points that
-            # approximate the spline as a polyline.
+        
             flat_pts = list(e.flattening(0.1))
             if len(flat_pts) < 2:
                 return 0.0
@@ -307,16 +259,11 @@ def _entity_length(e) -> float:
     return 0.0
 
 
-# ── Block traversal ──────────────────────────────────────────────────────────
+
 
 def _block_wall_length(doc, block_name: str, sx: float = 1.0,
                        sy: float = 1.0, _visited: set | None = None) -> float:
-    """Recursively sum wall-geometry lengths inside a block definition.
-
-    *sx* / *sy* are cumulative X / Y scale factors from outer INSERT
-    entities.  ``_visited`` guards against infinite recursion with
-    circular block references.
-    """
+    
     if _visited is None:
         _visited = set()
     if block_name in _visited:
@@ -331,12 +278,12 @@ def _block_wall_length(doc, block_name: str, sx: float = 1.0,
         return 0.0
 
     total = 0.0
-    uniform_scale = math.sqrt(abs(sx * sy))  # average scale for lengths
+    uniform_scale = math.sqrt(abs(sx * sy))  
 
     for e in block:
         t = e.dxftype()
         if t == "INSERT":
-            # Nested block — recurse with compounded scale
+            
             inner_sx = sx * (e.dxf.xscale if hasattr(e.dxf, "xscale") else 1.0)
             inner_sy = sy * (e.dxf.yscale if hasattr(e.dxf, "yscale") else 1.0)
             total += _block_wall_length(doc, e.dxf.name, inner_sx, inner_sy,
@@ -349,32 +296,11 @@ def _block_wall_length(doc, block_name: str, sx: float = 1.0,
     return total
 
 
-# ── Door clustering ──────────────────────────────────────────────────────────
+
 
 def _cluster_door_arcs(arcs: list, radius_tol_frac: float = 0.15,
                        center_tol_factor: float = 2.0) -> int:
-    """Group nearby door ARCs that belong to the same door.
-
-    Double-leaf doors (and sometimes single doors with trim arcs) produce
-    two ARC entities at roughly the same centre and radius.  We cluster
-    arcs whose centres are within ``center_tol_factor * radius`` of each
-    other **and** whose radii are within *radius_tol_frac* of each other,
-    counting each cluster as one door.
-
-    Parameters
-    ----------
-    arcs : list of (cx, cy, radius) tuples
-    radius_tol_frac : float
-        Maximum relative difference in radius for two arcs to be
-        considered part of the same door (default 15 %).
-    center_tol_factor : float
-        Centre-distance threshold expressed as a multiple of the mean
-        radius of the two arcs (default 2.0).
-
-    Returns
-    -------
-    int  – estimated number of doors.
-    """
+    
     if not arcs:
         return 0
     used = [False] * len(arcs)
@@ -393,20 +319,17 @@ def _cluster_door_arcs(arcs: list, radius_tol_frac: float = 0.15,
             mean_r = (r_i + r_j) / 2.0
             if mean_r == 0:
                 continue
-            # Check radius similarity
+            
             if abs(r_i - r_j) / mean_r > radius_tol_frac:
                 continue
-            # Check centre proximity
+            
             dist_centers = math.sqrt((cx_i - cx_j) ** 2 + (cy_i - cy_j) ** 2)
             if dist_centers <= center_tol_factor * mean_r:
-                used[j] = True  # belongs to same door
+                used[j] = True  
     return clusters
 
 
-# ── Wall segment collection & face-pair deduplication ────────────────────────
 
-# Tier-2 layers: these trace the same geometry as wall layers but at
-# foundation / slab level.  They are skipped when Tier-1 wall data exists.
 _FOOTER_LAYER_TOKENS = {"FOOTER", "FOOTING", "FOOTPRINT", "S-FOOTER",
                         "FNDN", "SLAB-OUTLINE"}
 
@@ -416,14 +339,7 @@ def _is_footer_layer(layer_name: str) -> bool:
 
 
 def _collect_structural_lines(msp, unit_to_m: float, doc=None) -> list:
-    """Return (x1,y1,x2,y2,length_raw) for LINE entities on structural layers.
-
-    Traverses INSERT block definitions so that walls stored inside reused
-    blocks are captured with correct world-space coordinates.
-    Transform composition handles translation, rotation, and non-uniform scale.
-
-    Only segments that pass the MIN_LENGTH_M filter are returned.
-    """
+   
     segs = []
 
     def _collect(entities, tx=0.0, ty=0.0,
@@ -437,7 +353,7 @@ def _collect_structural_lines(msp, unit_to_m: float, doc=None) -> list:
                 if not _is_structural_layer(layer) or _is_footer_layer(layer):
                     continue
                 try:
-                    # Apply scale in block-local space, then rotate + translate
+                    
                     lx1 = e.dxf.start.x * sx
                     ly1 = e.dxf.start.y * sy
                     lx2 = e.dxf.end.x   * sx
@@ -466,7 +382,7 @@ def _collect_structural_lines(msp, unit_to_m: float, doc=None) -> list:
                     isy  = getattr(e.dxf, "yscale", 1.0) or 1.0
                     ic   = math.cos(rot)
                     is_  = math.sin(rot)
-                    # Compose parent + INSERT transforms
+                   
                     new_cos = cos_r * ic  - sin_r * is_
                     new_sin = sin_r * ic  + cos_r * is_
                     new_sx  = sx * isx
@@ -483,15 +399,7 @@ def _collect_structural_lines(msp, unit_to_m: float, doc=None) -> list:
 
 
 def _detect_wall_thickness_raw(segments: list, fallback: float) -> float:
-    """Measure the actual wall face-pair distance from LINE segment data.
 
-    Samples perpendicular distances between parallel segment pairs and finds
-    the largest distance that occurs with significant frequency (≥10 % of the
-    most-common small distance).  This handles walls that have two distinct
-    thicknesses (e.g. interior 4-unit and exterior 6-unit face pairs).
-
-    Returns *fallback* when there are too few segments to measure.
-    """
     if len(segments) < 4:
         return fallback
 
@@ -514,43 +422,29 @@ def _detect_wall_thickness_raw(segments: list, fallback: float) -> float:
             mx_j = (x1j + x2j) / 2.0
             my_j = (y1j + y2j) / 2.0
             perp = abs((mx_j - mx_i) * nx + (my_j - my_i) * ny)
-            # Only collect small distances — true face pairs are thin walls
+           
             if 0.5 < perp < min(25.0, fallback):
                 distances.append(perp)
 
     if not distances:
         return fallback
 
-    # Bin to nearest integer and find all "significant" small distances
+    
     bins = Counter(round(d) for d in distances)
     small_bins = {k: v for k, v in bins.items() if 0 < k < 25}
     if not small_bins:
         return fallback
 
     max_count = max(small_bins.values())
-    # Keep bins whose count is ≥ 20 % of the most-common bin.
-    # True face-pair distances are very frequent (every wall contributes two
-    # parallel lines); incidental parallelism is sparse by comparison.
+    
     significant = [k for k, v in small_bins.items() if v >= max(max_count * 0.20, 3)]
-    # Use the LARGEST significant distance as the wall thickness
-    # (covers both thin interior walls and thicker exterior walls)
+    
     detected = max(significant) if significant else max(small_bins, key=small_bins.get)
     return float(max(detected, 1))
 
 
 def _merge_parallel_line_pairs(segments: list, wall_thickness_raw: float) -> list:
-    """Merge parallel LINE pairs (two wall faces) into one representative segment.
 
-    Two segments are considered the same wall when:
-    - Their angles differ by < 5°
-    - Their perpendicular midpoint distance is ≤ wall_thickness_raw + 1
-
-    Using detected_thickness + 1 (rather than × 1.5) gives a tight threshold
-    that correctly merges face pairs without accidentally collapsing adjacent
-    parallel walls into one.
-
-    The longer segment of each pair is kept.
-    """
     if not segments or wall_thickness_raw <= 0:
         return segments
 
@@ -591,31 +485,25 @@ def _merge_parallel_line_pairs(segments: list, wall_thickness_raw: float) -> lis
     return merged
 
 
-# ── Opening counting ─────────────────────────────────────────────────────────
 
 def _count_openings_from_layers(msp) -> dict:
-    """
-    Count doors and windows directly from DXF layer names.
 
-    Doors:   ARC entities in door layers (clustered to handle double-leaf doors).
-    Windows: INSERT or LWPOLYLINE groups in window layers, OR non-ARC entities
-             on "opening / glazing" type layers (A-OPENING, A-GLAZ, …) which
-             contain window frame lines even though those layers also hold door
-             swing arcs.
-    """
-    door_arcs_data = []       # (cx, cy, radius) for clustering
+    door_arcs_data = []
     door_inserts   = set()
     window_inserts = set()
     window_lines   = 0
-    opening_lines  = 0        # LINEs on OPENING-type layers (window frame lines)
-    opening_polys  = 0        # LWPOLYLINEs on OPENING-type layers (window outlines)
+    opening_lines  = 0
+    opening_polys  = 0
+
+    # Geometry based fallback accumulators (used when everything is on one layer)
+    geom_door_arcs  = []
+    geom_win_polys  = []
 
     for e in msp:
         layer  = e.dxf.layer if hasattr(e.dxf, "layer") else ""
         t      = e.dxftype()
         tokens = _tokenize_layer(layer)
 
-        # Check whether this layer is an "opening / glazing" type
         is_opening_type = _tokens_match(tokens, _OPENING_TOKENS)
 
         if _is_door_layer(layer):
@@ -628,14 +516,11 @@ def _count_openings_from_layers(msp) -> dict:
                 pos = (round(e.dxf.insert.x, 0), round(e.dxf.insert.y, 0))
                 door_inserts.add(pos)
             elif is_opening_type:
-                # Non-arc entities on an opening/glazing layer → window frames
                 if t == "LWPOLYLINE":
                     opening_polys += 1
                 elif t == "LINE":
                     opening_lines += 1
 
-        # Only process window-layer entities that weren't already handled above
-        # (avoids double-counting glazing layers that match both door & window)
         elif _is_window_layer(layer):
             if t == "INSERT":
                 pos = (round(e.dxf.insert.x, 0), round(e.dxf.insert.y, 0))
@@ -643,16 +528,55 @@ def _count_openings_from_layers(msp) -> dict:
             elif t in ("LINE", "LWPOLYLINE"):
                 window_lines += 1
 
-    # ── Door count ──────────────────────────────────────────────────────────
+        else:
+            # Geometry based detection for files where everything is on one layer
+            # Door swing arcs: sweep between 60 and 100 degrees, radius > 5 raw units
+            if t == "ARC":
+                try:
+                    r  = e.dxf.radius
+                    a1 = e.dxf.start_angle
+                    a2 = e.dxf.end_angle
+                    sweep = a2 - a1
+                    while sweep <= 0:
+                        sweep += 360
+                    if r > 5 and 55 <= sweep <= 105:
+                        cx = e.dxf.center.x
+                        cy = e.dxf.center.y
+                        geom_door_arcs.append((cx, cy, r))
+                except Exception:
+                    pass
+
+            # Window rectangles: closed LWPOLYLINE with 4 to 6 points, aspect ratio
+            # between 2:1 and 8:1 (windows are wide and shallow)
+            elif t == "LWPOLYLINE":
+                try:
+                    pts = list(e.get_points("xy"))
+                    n = len(pts)
+                    if n < 4:
+                        continue
+                    xs = [p[0] for p in pts]
+                    ys = [p[1] for p in pts]
+                    w  = max(xs) - min(xs)
+                    h  = max(ys) - min(ys)
+                    if w <= 0 or h <= 0:
+                        continue
+                    aspect = max(w, h) / min(w, h)
+                    size   = max(w, h)
+                    # Typical window: elongated rectangle, not too tiny, not huge
+                    if 1.5 <= aspect <= 10 and size > 3:
+                        geom_win_polys.append((round(min(xs), 0), round(min(ys), 0)))
+                except Exception:
+                    pass
+
+    # Layer based door count (preferred)
     door_count = _cluster_door_arcs(door_arcs_data)
     doors = door_count if door_count > 0 else len(door_inserts)
 
-    # ── Window count ─────────────────────────────────────────────────────────
-    # Priority: dedicated window INSERTs → window-layer lines →
-    #           opening-layer LWPOLYLINEs → opening-layer LINE groups
-    #
-    # Window frames in detailed DXF drawings use ~4 lines each (outer frame).
-    # On A-OPENING layers, ~20 lines per window is common (frame + sill + reveal).
+    # If layer based detection found nothing, use geometry based arcs
+    if doors == 0 and geom_door_arcs:
+        doors = _cluster_door_arcs(geom_door_arcs)
+
+    # Layer based window count (preferred)
     if window_inserts:
         windows = len(window_inserts)
     elif window_lines > 0:
@@ -664,10 +588,82 @@ def _count_openings_from_layers(msp) -> dict:
     else:
         windows = 0
 
+    # If layer based detection found nothing, use geometry based polylines
+    if windows == 0 and geom_win_polys:
+        # Deduplicate by proximity
+        unique_wins = []
+        for pos in geom_win_polys:
+            is_dup = False
+            for ex in unique_wins:
+                if abs(pos[0] - ex[0]) < 5 and abs(pos[1] - ex[1]) < 5:
+                    is_dup = True
+                    break
+            if not is_dup:
+                unique_wins.append(pos)
+        windows = len(unique_wins)
+
     return {"doors": doors, "windows": windows}
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+
+def _detect_rooms_from_segments(segments: list, unit_to_m: float, bbox: tuple) -> dict:
+
+    import cv2 as _cv2
+    import numpy as _np
+
+    bx0, by0, bx1, by1 = bbox
+    w_raw = bx1 - bx0
+    h_raw = by1 - by0
+    if w_raw <= 0 or h_raw <= 0:
+        return {"room_count": 0, "total_floor_area_m2": 0, "areas": []}
+
+   
+    scale = 1000.0 / max(w_raw, h_raw)
+    bw = int(w_raw * scale) + 20
+    bh = int(h_raw * scale) + 20
+    canvas = _np.zeros((bh, bw), dtype=_np.uint8)
+
+    for (x1, y1, x2, y2, _) in segments:
+        px1 = int((x1 - bx0) * scale) + 10
+        py1 = int((by1 - y1) * scale) + 10  # flip Y
+        px2 = int((x2 - bx0) * scale) + 10
+        py2 = int((by1 - y2) * scale) + 10
+        _cv2.line(canvas, (px1, py1), (px2, py2), 255, 2)
+
+  
+    kernel = _cv2.getStructuringElement(_cv2.MORPH_RECT, (11, 11))
+    closed = _cv2.morphologyEx(canvas, _cv2.MORPH_CLOSE, kernel, iterations=3)
+
+    inverted = _cv2.bitwise_not(closed)
+    contours, _ = _cv2.findContours(inverted, _cv2.RETR_TREE, _cv2.CHAIN_APPROX_SIMPLE)
+
+    px_to_m = 1.0 / scale * unit_to_m
+    m2_per_px2 = px_to_m * px_to_m
+    total_area_m2 = bw * bh * m2_per_px2
+
+    rooms = []
+    for cnt in contours:
+        area_px = _cv2.contourArea(cnt)
+        area_m2 = area_px * m2_per_px2
+        if area_m2 < 2.0 or area_m2 > 500.0:
+            continue
+        if area_m2 > total_area_m2 * 0.8:
+            continue
+        hull = _cv2.convexHull(cnt)
+        hull_area = _cv2.contourArea(hull)
+        if hull_area > 0 and area_px / hull_area < 0.3:
+            continue
+        rooms.append(round(area_m2, 2))
+
+    rooms.sort(reverse=True)
+    return {
+        "room_count": len(rooms),
+        "total_floor_area_m2": round(sum(rooms), 2),
+        "areas": rooms,
+    }
+
+
+# Public API 
 
 def analyze_dxf(dxf_path: str) -> dict:
     doc      = ezdxf.readfile(dxf_path)
@@ -679,44 +675,35 @@ def analyze_dxf(dxf_path: str) -> dict:
     if unit_to_m is None:
         unit_to_m, unit_label, assumed = 0.001, "unitless assumed mm", True
 
-    # ── Auto-correct unit factor ──────────────────────────────────────────────
-    # Some DXF files declare $INSUNITS=4 (mm) but store coordinates in inches
-    # or feet.  Detect the mismatch by checking the bounding-box size.
     unit_to_m, unit_label, auto_corrected = _auto_correct_unit_factor(
         unit_to_m, unit_label, msp
     )
 
-    # ── Collect LINE segments first (needed to measure actual wall thickness) ──
+    
     bbox = _compute_bbox_raw(msp)
     building_width_raw  = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
     fallback_thickness  = building_width_raw * 0.02   # 2 % fallback if data too sparse
 
     line_segs = _collect_structural_lines(msp, unit_to_m, doc)
 
-    # ── Detect actual wall face-pair thickness from data ──────────────────────
-    # Replaces the fixed "2 % of building width" heuristic which over-merges
-    # adjacent parallel walls that happen to be within ~26 units of each other.
+ 
     wall_thickness_raw = _detect_wall_thickness_raw(line_segs, fallback_thickness)
 
-    # ── Face-merge LINE pairs → single centerline per wall ───────────────────
+   
     tier1_line_raw = 0.0
     if line_segs:
         merged_lines   = _merge_parallel_line_pairs(line_segs, wall_thickness_raw)
         tier1_line_raw = sum(s[4] for s in merged_lines)
 
-    # ── Collect non-LINE entities from structural layers ─────────────────────
-    # LWPOLYLINEs / POLYLINEs / ARCs / SPLINEs are kept as-is (they are
-    # usually already single-line representations or block inserts).
-    #
-    # Layer priority:
-    #   • Skip FOOTER / FOOTPRINT layers when Tier-1 wall data was found — they
-    #     duplicate the same geometry at foundation level.
-    #   • Layer "0" is included only if it carries >5 m of geometry.
-    total_raw       = tier1_line_raw   # start with face-merged LINE total
-    entity_count    = len(line_segs)   # rough count (updated below)
+
+    total_raw       = tier1_line_raw
+    entity_count    = len(line_segs)
     layer0_raw      = 0.0
     layer0_entities = 0
-    has_tier1_line  = tier1_line_raw > 0.0
+    # Only trust LINE segments as the complete wall dataset if we have enough
+    # of them. A handful of LINE entities (door details, a single long wall)
+    # should not suppress the much larger LWPOLYLINE wall data.
+    has_tier1_line  = len(merged_lines) >= 5 and (tier1_line_raw * unit_to_m) > 20.0
 
     for e in msp:
         layer  = e.dxf.layer if hasattr(e.dxf, "layer") else ""
@@ -728,10 +715,10 @@ def analyze_dxf(dxf_path: str) -> dict:
 
         length = _entity_length(e)
 
-        # ── INSERT on structural layers: recurse into block ──────────────────
+       
         if t == "INSERT" and _is_structural_layer(layer):
             if has_tier1_line:
-                continue  # LINE data already covers walls; skip block inserts
+                continue  
             block_sx = e.dxf.xscale if hasattr(e.dxf, "xscale") else 1.0
             block_sy = e.dxf.yscale if hasattr(e.dxf, "yscale") else 1.0
             blk_len  = _block_wall_length(doc, e.dxf.name, block_sx, block_sy)
@@ -743,6 +730,32 @@ def analyze_dxf(dxf_path: str) -> dict:
         if length == 0:
             continue
 
+        # For closed LWPOLYLINE rectangles (wall sections drawn with thickness),
+        # use only the longer dimension instead of the full perimeter.
+        # Also skip the building outline (the single largest closed rectangle).
+        if t == "LWPOLYLINE":
+            try:
+                pts = list(e.get_points("xy"))
+                n   = len(pts)
+                if n >= 4:
+                    xs  = [p[0] for p in pts]
+                    ys  = [p[1] for p in pts]
+                    w   = max(xs) - min(xs)
+                    h   = max(ys) - min(ys)
+                    if w > 0 and h > 0:
+                        aspect = max(w, h) / min(w, h)
+                        # Skip the building outline: very large rectangle
+                        # whose longer side is > 60% of the overall building width
+                        if max(w, h) > building_width_raw * 0.60:
+                            continue
+                        # Wall section drawn as a thin closed rectangle:
+                        # aspect > 3 means it is much longer than wide.
+                        # Use only the longer side as the wall length.
+                        if aspect > 3:
+                            length = max(w, h)
+            except Exception:
+                pass
+
         length_m = length * unit_to_m
         if length_m < MIN_LENGTH_M:
             continue
@@ -752,20 +765,16 @@ def analyze_dxf(dxf_path: str) -> dict:
             layer0_entities += 1
         elif _is_structural_layer(layer):
             if has_tier1_line:
-                # LINE segments already represent all walls (face-merged).
-                # LWPOLYLINE / POLYLINE entities on structural layers are wall-
-                # outline traces that duplicate the same geometry — skip them to
-                # avoid counting the same walls 2–3 ×.
                 continue
             total_raw    += length
             entity_count += 1
 
-    # Include layer "0" if it has substantial geometry
+  
     if layer0_raw * unit_to_m > 5.0:
         total_raw    += layer0_raw
         entity_count += layer0_entities
 
-    # ── Fallback: no known wall layers found ─────────────────────────────────
+    
     fallback_used = False
     if entity_count == 0 and tier1_line_raw == 0.0:
         fallback_used = True
@@ -777,13 +786,30 @@ def analyze_dxf(dxf_path: str) -> dict:
             length = _entity_length(e)
             if length <= 0:
                 continue
+            # Apply same aspect ratio fix for LWPOLYLINE in fallback
+            if e.dxftype() == "LWPOLYLINE":
+                try:
+                    pts = list(e.get_points("xy"))
+                    if len(pts) >= 4:
+                        xs = [p[0] for p in pts]
+                        ys = [p[1] for p in pts]
+                        w  = max(xs) - min(xs)
+                        h  = max(ys) - min(ys)
+                        if w > 0 and h > 0:
+                            if max(w, h) > building_width_raw * 0.60:
+                                continue
+                            aspect = max(w, h) / min(w, h)
+                            if aspect > 3:
+                                length = max(w, h)
+                except Exception:
+                    pass
             length_m = length * unit_to_m
             if length_m < MIN_LENGTH_M:
                 continue
             total_raw    += length
             entity_count += 1
 
-    # ── Count doors & windows from layers ────────────────────────────────────
+    
     openings = _count_openings_from_layers(msp)
 
     scale_note = (
@@ -793,9 +819,37 @@ def analyze_dxf(dxf_path: str) -> dict:
         + (" [fallback]"       if fallback_used   else "")
     )
 
+    length_m = round(total_raw * unit_to_m, 2)
+
+  
+    conf_score = 70
+    if not assumed and not auto_corrected:
+        conf_score += 15  # correct units declared
+    if not fallback_used:
+        conf_score += 10  # found proper wall layers
+    if openings["doors"] >= 1:
+        conf_score += 3
+    if openings["windows"] >= 1:
+        conf_score += 2
+    conf_score = min(100, conf_score)
+
+    if conf_score >= 75:
+        conf_label = "High"
+    elif conf_score >= 55:
+        conf_label = "Good"
+    elif conf_score >= 35:
+        conf_label = "Medium"
+    else:
+        conf_label = "Low"
+
+    # Room detection (from wall segments)
+    rooms = {"room_count": 0, "total_floor_area_m2": 0, "areas": []}
+    if line_segs and unit_to_m > 0:
+        rooms = _detect_rooms_from_segments(line_segs, unit_to_m, bbox)
+
     return {
         "walls":        entity_count,
-        "length_m":     round(total_raw * unit_to_m, 2),
+        "length_m":     length_m,
         "doors":        openings["doors"],
         "windows":      openings["windows"],
         "scale_source": scale_note,
@@ -804,6 +858,24 @@ def analyze_dxf(dxf_path: str) -> dict:
             "unit_to_m":  unit_to_m,
             "unit_label": unit_label,
         },
+        "confidence": {
+            "score": conf_score,
+            "label": conf_label,
+            "factors": {
+                "units_declared": not assumed,
+                "units_corrected": auto_corrected,
+                "fallback_used": fallback_used,
+                "entity_count": entity_count,
+            },
+        },
+        "metrics": {
+            "raw_segments":    len(line_segs),
+            "merged_segments": len(merged_lines) if line_segs else 0,
+            "scale_method":    "dxf",
+            "unit_to_m":       unit_to_m,
+            "analysis_method": "DXF Layer Analysis",
+        },
+        "rooms": rooms,
     }
 
 

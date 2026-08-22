@@ -1,0 +1,100 @@
+.sh-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 20px;
+  animation: fadeIn 0.2s;
+}
+.sh-box {
+  background: #FFFFFF; border-radius: 20px;
+  width: 100%; max-width: 440px; padding: 32px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.25);
+  animation: slideUp 0.25s; position: relative;
+  max-height: 90vh; overflow-y: auto;
+}
+.sh-close {
+  position: absolute; top: 16px; right: 16px;
+  background: #F3F4F6; border: none; border-radius: 8px;
+  width: 32px; height: 32px; cursor: pointer;
+  font-size: 18px; display: flex; align-items: center; justify-content: center;
+  color: #6B7280;
+}
+.sh-close:hover { background: #E5E7EB; }
+
+.sh-title { font-family: var(--font-display); font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+.sh-sub   { font-size: 13px; color: #6B7280; margin-bottom: 20px; }
+
+/* Tabs */
+.sh-tabs {
+  display: flex; gap: 4px; background: #F3F4F6;
+  border-radius: 10px; padding: 4px; margin-bottom: 20px;
+}
+.sh-tab {
+  flex: 1; background: none; border: none; cursor: pointer;
+  font-family: var(--font-body); font-size: 12px; font-weight: 600;
+  color: #6B7280; padding: 8px 4px; border-radius: 7px;
+  transition: all 0.15s; white-space: nowrap;
+}
+.sh-tab.active { background: #FFFFFF; color: #0D0D0D; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+/* Guide box */
+.sh-guide { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px; margin-bottom: 18px; }
+.sh-guide-step { font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+.sh-guide p    { font-size: 13px; color: #374151; line-height: 1.55; margin-bottom: 6px; }
+.sh-guide p:last-child { margin-bottom: 0; }
+.sh-guide-note { font-size: 11px !important; color: #92400E !important; background: #FFFBEB; border-radius: 6px; padding: 6px 8px; }
+
+.sh-diagram {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; margin-top: 10px; padding: 10px;
+  background: #FFFFFF; border-radius: 8px; border: 1px dashed #E5E7EB;
+}
+.sh-tick { width: 2px; height: 14px; background: #0D0D0D; border-radius: 1px; }
+.sh-line { flex: 1; height: 2px; background: #0D0D0D; max-width: 50px; }
+.sh-dim-text { font-weight: 700; font-size: 14px; color: #0D0D0D; font-family: var(--font-display); }
+
+.sh-step2 { font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+
+.sh-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.sh-row--single { grid-template-columns: 1fr; }
+.sh-row label { font-size: 12px; font-weight: 600; color: #6B7280; display: block; margin-bottom: 6px; }
+.sh-row input {
+  width: 100%; padding: 10px 12px;
+  border: 1.5px solid #E5E7EB; border-radius: 9px;
+  font-family: var(--font-body); font-size: 14px;
+  outline: none; transition: border 0.15s;
+}
+.sh-row input:focus { border-color: #0D0D0D; }
+
+/* Common area quick-pick buttons */
+.sh-common-areas {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  align-items: center; margin-bottom: 16px;
+}
+.sh-ca-label { font-size: 11px; color: #9CA3AF; font-weight: 600; margin-right: 2px; }
+.sh-ca-btn {
+  background: #F3F4F6; border: 1px solid #E5E7EB;
+  border-radius: 6px; cursor: pointer;
+  font-family: var(--font-body); font-size: 12px;
+  font-weight: 600; color: #374151; padding: 4px 10px;
+  transition: all 0.15s;
+}
+.sh-ca-btn:hover { background: #0D0D0D; color: #FFFFFF; border-color: #0D0D0D; }
+
+/* Result */
+.sh-result {
+  background: #DCFCE7; border-radius: 10px;
+  padding: 12px 16px; margin-bottom: 14px;
+}
+.sh-result-main { font-size: 15px; font-weight: 700; color: #166534; }
+.sh-result-note { font-size: 11px; color: #166534; opacity: 0.75; margin-top: 3px; }
+
+.sh-apply {
+  width: 100%; background: #0D0D0D; color: #FFFFFF;
+  border: none; border-radius: 10px; cursor: pointer;
+  font-family: var(--font-body); font-size: 15px; font-weight: 700;
+  padding: 14px; transition: all 0.15s;
+}
+.sh-apply:hover    { background: #2A2A2A; }
+.sh-apply:disabled { opacity: 0.4; cursor: not-allowed; }

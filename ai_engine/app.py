@@ -1,16 +1,12 @@
 import os
-
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-
 from routes.auth    import auth_bp
 from routes.analyze import analyze_bp
+from routes.admin   import admin_bp
 from db import init_db
 
-# -----------------------------
-# App setup
-# -----------------------------
 app = Flask(__name__)
 CORS(app)
 
@@ -23,6 +19,11 @@ try:
     app.register_blueprint(analyze_bp)
 except Exception as e:
     print(f"⚠️  analyze_bp not registered: {e}")
+
+try:
+    app.register_blueprint(admin_bp)
+except Exception as e:
+    print(f"⚠️  admin_bp not registered: {e}")
 
 # Init DB
 try:

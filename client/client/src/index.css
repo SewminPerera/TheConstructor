@@ -1,0 +1,4 @@
+/* Global resets — tokens.css is imported by App.jsx */
+html { scroll-behavior: smooth; }
+a    { color: inherit; text-decoration: none; }
+button { font-family: inherit; }

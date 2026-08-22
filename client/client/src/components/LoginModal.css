@@ -1,0 +1,49 @@
+.lm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+.lm-box {
+  background: var(--white); border-radius: 20px;
+  width: 100%; max-width: 440px; padding: 36px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.2);
+  animation: slideUp 0.25s ease; position: relative;
+}
+.lm-close {
+  position: absolute; top: 16px; right: 16px;
+  background: var(--surface); border: none; border-radius: 8px;
+  width: 32px; height: 32px; cursor: pointer; font-size: 18px;
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
+}
+.lm-close:hover { background: var(--border); }
+.lm-logo    { font-family: var(--font-display); font-weight: 800; font-size: 20px; margin-bottom: 6px; }
+.lm-tagline { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
+.lm-tabs {
+  display: grid; grid-template-columns: 1fr 1fr;
+  background: var(--surface); border-radius: 10px; padding: 4px; margin-bottom: 24px;
+}
+.lm-tab {
+  background: none; border: none; border-radius: 8px; cursor: pointer;
+  font-family: var(--font-body); font-size: 14px; font-weight: 600;
+  padding: 9px; color: var(--muted); transition: all 0.15s;
+}
+.lm-tab.active { background: var(--white); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+.lm-error  { font-size: 13px; color: var(--red); background: var(--red-light); padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; }
+.lm-submit {
+  width: 100%; margin-top: 8px; background: var(--ink); color: var(--white);
+  border: none; border-radius: 10px; cursor: pointer;
+  font-family: var(--font-body); font-size: 15px; font-weight: 700;
+  padding: 13px; transition: all 0.15s;
+}
+.lm-submit:hover    { background: var(--ink-2); }
+.lm-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.lm-demo {
+  width: 100%; background: var(--surface);
+  border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer;
+  font-family: var(--font-body); font-size: 14px; font-weight: 600;
+  padding: 11px; color: var(--ink); transition: all 0.15s;
+}
+.lm-demo:hover    { border-color: var(--ink); background: var(--white); }
+.lm-demo:disabled { opacity: 0.6; cursor: not-allowed; }

@@ -1,10 +1,3 @@
-"""
-routes/auth.py
---------------
-POST /auth/register  — create account
-POST /auth/login     — returns JWT access token
-GET  /auth/me        — returns current user (requires JWT)
-"""
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
     create_access_token,
@@ -12,7 +5,6 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 
-# bcrypt wrapper — tries bcrypt first, falls back to werkzeug on Windows
 try:
     import bcrypt as _bcrypt
     def _hash_password(plain: str) -> str:
@@ -36,16 +28,14 @@ from db.models import (
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-
 def _user_public(user: dict) -> dict:
-    """Strip sensitive fields before sending to client."""
     return {
         "id":         str(user["_id"]),
         "name":       user.get("name", ""),
         "email":      user.get("email", ""),
+        "role":       user.get("role", "user"),
         "created_at": str(user.get("created_at", "")),
     }
-
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
@@ -79,7 +69,6 @@ def register():
         import traceback; traceback.print_exc()
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
-
 @auth_bp.route("/login", methods=["POST"])
 def login():
     try:
@@ -104,7 +93,6 @@ def login():
         print(f"❌ Login error: {e}")
         import traceback; traceback.print_exc()
         return jsonify({"error": f"Server error: {str(e)}"}), 500
-
 
 @auth_bp.route("/me", methods=["GET"])
 @jwt_required()

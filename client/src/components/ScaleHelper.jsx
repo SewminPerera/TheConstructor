@@ -2,13 +2,29 @@ import { useState } from "react";
 import "./ScaleHelper.css";
 
 const TABS = [
-  { id: "dim",  label: "Width / Length" },
-  { id: "sqft", label: "Square Footage" },
-  { id: "sqm",  label: "Square Metres"  },
+  { id: "ratio", label: "Drawing Scale" },
+  { id: "dim",   label: "Width / Length" },
+  { id: "sqft",  label: "Square Footage" },
+  { id: "sqm",   label: "Square Metres"  },
+];
+
+const COMMON_SCALES = [
+  { label: "1:50",  value: 50  },
+  { label: "1:75",  value: 75  },
+  { label: "1:100", value: 100 },
+  { label: "1:150", value: 150 },
+  { label: "1:200", value: 200 },
+  { label: "1:250", value: 250 },
+  { label: "1:500", value: 500 },
 ];
 
 export default function ScaleHelper({ onClose, onApply }) {
-  const [tab,    setTab]    = useState("dim");
+  const [tab,    setTab]    = useState("ratio");
+
+  // Tab: ratio
+  const [scaleRatio,    setScaleRatio]    = useState(100);
+  const [customRatio,   setCustomRatio]   = useState("");
+  const [measuredMm,    setMeasuredMm]    = useState("");
 
   // Tab: dim
   const [feet,   setFeet]   = useState("");
@@ -23,6 +39,14 @@ export default function ScaleHelper({ onClose, onApply }) {
   // ── Computed values ─────────────────────────────────────────────────────────
   let meters = null;
   let note   = "";
+
+  const activeRatio = customRatio ? parseFloat(customRatio) : scaleRatio;
+
+  if (tab === "ratio" && measuredMm && activeRatio > 0) {
+    const realMm = parseFloat(measuredMm) * activeRatio;
+    meters = (realMm / 1000).toFixed(2);
+    note   = `${measuredMm} mm × ${activeRatio} = ${realMm} mm = ${meters} m`;
+  }
 
   if (tab === "dim" && feet) {
     meters = ((parseFloat(feet || 0) + parseFloat(inches || 0) / 12) * 0.3048).toFixed(2);
@@ -63,6 +87,63 @@ export default function ScaleHelper({ onClose, onApply }) {
             </button>
           ))}
         </div>
+
+        {/* ── Tab: Drawing Scale ── */}
+        {tab === "ratio" && (
+          <>
+            <div className="sh-guide">
+              <div className="sh-guide-step">How to use this</div>
+              <p>Check the bottom of your blueprint for the scale notation, e.g. <strong>1:100</strong> or <strong>Scale 1:50</strong>. Then measure any wall or dimension on the <strong>printed plan</strong> with a ruler in millimetres and enter it below.</p>
+            </div>
+
+            <div className="sh-step2">Select the drawing scale</div>
+            <div className="sh-scale-presets">
+              {COMMON_SCALES.map((s) => (
+                <button
+                  key={s.value}
+                  className={`sh-scale-btn${scaleRatio === s.value && !customRatio ? " active" : ""}`}
+                  onClick={() => { setScaleRatio(s.value); setCustomRatio(""); }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="sh-step2" style={{ marginTop: 12 }}>Or enter a custom ratio</div>
+            <div className="sh-row sh-row--single">
+              <div>
+                <label>Scale (e.g. 150 for 1:150)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 150"
+                  value={customRatio}
+                  min="1"
+                  onChange={(e) => setCustomRatio(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="sh-step2" style={{ marginTop: 12 }}>Measure a wall on the printed plan</div>
+            <div className="sh-row sh-row--single">
+              <div>
+                <label>Measured length on paper (mm)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 85"
+                  value={measuredMm}
+                  min="1"
+                  onChange={(e) => setMeasuredMm(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {meters && (
+              <div className="sh-scale-result-hint">
+                📐 {measuredMm} mm on paper × 1:{activeRatio} = <strong>{meters} m</strong> in real life
+              </div>
+            )}
+          </>
+        )}
 
         {/* ── Tab: Width/Length ── */}
         {tab === "dim" && (
