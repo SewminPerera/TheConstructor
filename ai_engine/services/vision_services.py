@@ -84,8 +84,8 @@ def _deskew_image(img: np.ndarray) -> np.ndarray:
 
     lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=80,
     minLineLength=100, maxLineGap=10)
-    if lines is None:
-    return img
+    if lines is None:                                                                                   
+        return img
 
     angles = []
     for line in lines:
