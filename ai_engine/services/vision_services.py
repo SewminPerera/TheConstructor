@@ -74,7 +74,7 @@ def _validate_image(img: np.ndarray) -> dict | None:
     return None
 
 
-# OpenCV helpers 
+
 
 def _deskew_image(img: np.ndarray) -> np.ndarray:
    
